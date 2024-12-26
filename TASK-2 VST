@@ -1,0 +1,67 @@
+import socket
+import requests
+from concurrent.futures import ThreadPoolExecutor
+
+def scan_port(host, port):
+    """Scan a specific port on a given host."""
+    try:
+        with socket.create_connection((host, port), timeout=1):
+            return port
+    except (socket.timeout, ConnectionRefusedError):
+        return None
+
+def scan_ports(host, ports):
+    """Scan a range of ports on a host."""
+    print(f"Scanning ports on {host}...")
+    open_ports = []
+    with ThreadPoolExecutor() as executor:
+        results = executor.map(lambda p: scan_port(host, p), ports)
+        for port, result in zip(ports, results):
+            if result:
+                open_ports.append(port)
+    return open_ports
+
+def check_http_headers(url):
+    """Check HTTP headers for potential vulnerabilities."""
+    try:
+        response = requests.get(url, timeout=5)
+        headers = response.headers
+        issues = []
+
+        if 'Server' in headers:
+            server = headers['Server']
+            if 'Apache' in server or 'nginx' in server:
+                issues.append(f"Server header reveals information: {server}")
+
+        if 'X-Powered-By' in headers:
+            issues.append(f"X-Powered-By header reveals information: {headers['X-Powered-By']}")
+
+        return issues
+    except requests.RequestException as e:
+        print(f"Error checking HTTP headers: {e}")
+        return ["Failed to connect to the URL."]
+
+def scan_vulnerabilities(host, ports, url):
+    """Perform a full vulnerability scan on the host and URL."""
+    print("Starting vulnerability scan...")
+
+    # Port scanning
+    open_ports = scan_ports(host, ports)
+    print(f"Open ports: {open_ports}")
+
+    # HTTP header scanning
+    header_issues = check_http_headers(url)
+    print("HTTP header issues:")
+    for issue in header_issues:
+        print(f"- {issue}")
+
+    print("Vulnerability scan complete.")
+
+if __name__ == "__main__":
+    # User input for scanning parameters
+    target_host = input("Enter the target host (e.g., example.com): ")
+    target_url = f"http://{target_host}" if not target_host.startswith("http") else target_host
+
+    ports_to_scan = range(1, 1025)  # First 1024 well-known ports
+
+    scan_vulnerabilities(target_host, ports_to_scan, target_url)
